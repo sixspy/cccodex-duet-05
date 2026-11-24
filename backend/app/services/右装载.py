@@ -1,7 +1,7 @@
 """右轨（核心记账）装载。"""
 from __future__ import annotations
 import json, uuid
-from app.db import 连接
+from app.db import 写事务
 from app.seed import 此刻
 from app.services import 校验
 
@@ -11,8 +11,8 @@ def 装一批(体: dict) -> dict:
     报告 = {"批次编号": 批次, "轨别": "右", "入流": 0, "跳过": 0, "驳回": 0, "明细": []}
     for e in 校验.校验批次(体):
         报告["明细"].append({"命运": "批次预检", "说明": e})
-    conn = 连接()
-    try:
+    # 整批一个写事务：与迟到补记/对齐抢跑时由写锁串行，不落半批。
+    with 写事务() as conn:
         for ev in 事件:
             行错 = 校验.校验事件(ev)
             if 行错:
@@ -48,7 +48,4 @@ def 装一批(体: dict) -> dict:
             "INSERT INTO 装载批次(编号,轨别,时刻,报告) VALUES (?,?,?,?)",
             (批次, "右", 此刻(), json.dumps(报告, ensure_ascii=False)),
         )
-        conn.commit()
-        return 报告
-    finally:
-        conn.close()
+    return 报告

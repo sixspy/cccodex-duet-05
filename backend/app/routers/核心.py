@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.services import 目录, 左装载, 右装载, 对齐, 结论, 夹具, 统计, 说明
+from app.modules import 左轨迟到补记 as 迟到补记
 
 路由 = APIRouter()
 
@@ -51,15 +52,17 @@ def api_左装(体: dict):
 def api_右装(体: dict):
     return 右装载.装一批(体)
 
-@路由.post("/api/左轨/夹具/{名}")
-def api_左夹(名: str):
+@路由.post("/api/左轨/夹具/{name}")
+def api_左夹(name: str):
+    名 = name
     try:
         return 左装载.装一批(夹具.读取(名))
     except FileNotFoundError:
         raise HTTPException(404, 名)
 
-@路由.post("/api/右轨/夹具/{名}")
-def api_右夹(名: str):
+@路由.post("/api/右轨/夹具/{name}")
+def api_右夹(name: str):
+    名 = name
     try:
         return 右装载.装一批(夹具.读取(名))
     except FileNotFoundError:
@@ -95,14 +98,66 @@ def api_悬边():
 def api_仓情():
     return 说明.仓情()
 
+
+# ---------------------------------------------------------------- 左轨迟到补记
+# 只读视图恒含：业务键 / 旧悬边 / 现行悬 / 归档键 / valid
+
+@路由.get("/api/迟到补记/策略")
+def api_补记策略():
+    return 迟到补记.策略()
+
+@路由.get("/api/迟到补记")
+def api_补记列表():
+    return 迟到补记.列表()
+
+@路由.get("/api/迟到补记/归档")
+def api_补记归档():
+    return 迟到补记.归档列表()
+
+# Starlette 路径参数名只认 ASCII，故用 {key}；业务键可含中文/斜杠，故用 :path 并放在
+# 固定子路径（策略 / 归档 / 夹具）之后注册，避免被吞。
+@路由.get("/api/迟到补记/{key:path}")
+def api_补记详情(key: str):
+    try:
+        return 迟到补记.详情(key)
+    except 迟到补记.补记驳回 as e:
+        raise HTTPException(e.状态码, e.说明)
+
+@路由.post("/api/迟到补记")
+def api_补记(体: dict):
+    try:
+        return 迟到补记.补记(体)
+    except 迟到补记.补记驳回 as e:
+        raise HTTPException(e.状态码, e.说明)
+
+@路由.post("/api/迟到补记/夹具/{name}")
+def api_补记夹具(name: str, 体: dict | None = None):
+    名 = name
+    try:
+        夹 = 夹具.读取(名)
+    except FileNotFoundError:
+        raise HTTPException(404, 名)
+    请求 = dict(夹)
+    if 体:
+        请求.update(体)
+    try:
+        return 迟到补记.补一批(请求)
+    except 迟到补记.补记驳回 as e:
+        raise HTTPException(e.状态码, e.说明)
+
+
 @路由.get("/api/空桩")
 def api_空桩():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "modules"
     out = []
+    done = []
     if root.is_dir():
         for p in sorted(root.iterdir()):
-            if p.is_dir() and p.name != "__pycache__" and (p / "__init__.py").is_file():
-                out.append(p.name)
-    return {"空桩": out, "条数": len(out)}
+            if not (p.is_dir() and p.name != "__pycache__" and (p / "__init__.py").is_file()):
+                continue
+            # 已落主链路的模块不再算空桩：README/题面按「空桩」口径枚举时必须一致。
+            src = (p / "__init__.py").read_text(encoding="utf-8")
+            (out if "空桩" in src else done).append(p.name)
+    return {"空桩": out, "条数": len(out), "已实现": done}
 

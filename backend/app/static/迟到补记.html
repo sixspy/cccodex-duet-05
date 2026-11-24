@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>迟到补记 · 对拍</title>
+  <link rel="stylesheet" href="/styles.css"/>
+</head>
+<body>
+  <div class="壳">
+    <header class="顶栏">
+      <div class="顶左">
+        <div class="牌名">对拍</div>
+        <div class="牌骨">左轨装载 → 右轨装载 → 同键对齐落差 → 单边悬账 → 对拍结论</div>
+      </div>
+      <nav class="管线">
+          <a href="/">对拍台</a>
+          <a href="/左轨.html">左轨流水</a>
+          <a href="/右轨.html">右轨流水</a>
+          <a href="/对齐差.html">对齐差表</a>
+          <a href="/悬账单.html">悬账单</a>
+          <a href="/迟到补记.html" class="亮">迟到补记</a>
+          <a href="/对拍结论.html">对拍结论</a>
+          <a href="/源登记.html">源登记</a>
+          <a href="/轨规.html">轨规</a>
+      </nav>
+    </header>
+    <main class="主">
+
+      <section class="行卡">
+        <h1>左轨迟到补记</h1>
+        <p class="说明">
+          右轨先入并跑出「右悬」后，左轨同业务键迟到到达时的补齐。
+          补记把「写左事件 + 消旧悬 + 重跑该键对齐」放在同一票里，不靠改悬边角标糊弄。
+          形态二选一：<b>消悬重对齐</b>（现行无悬、无归档）或
+          <b>双写两轨保留悬账快照</b>（现行无悬、归档留旧悬，二者可区分）。
+        </p>
+        <div class="工具条">
+          <label>补记形态
+            <select id="形态">
+              <option value="消悬重对齐">消悬重对齐</option>
+              <option value="双写两轨保留悬账快照">双写两轨保留悬账快照</option>
+            </select>
+          </label>
+          <button class="次" id="存形态">保存形态</button>
+          <span class="说明" id="形态说明"></span>
+        </div>
+        <pre class="报" id="报"></pre>
+      </section>
+
+      <section class="行卡">
+        <h2>补一条</h2>
+        <p class="说明">前提：该业务键当前是「右悬」（右轨有、左轨无）。补记会在同一票里写左事件、消旧悬、重跑该键对齐。</p>
+        <div class="工具条">
+          <input id="补键" placeholder="业务键"/>
+          <input id="补额" placeholder="金额分" style="width:110px"/>
+          <input id="补编号" placeholder="事件编号（可空）" style="width:180px"/>
+          <button id="补">补记</button>
+          <button class="次" id="灌夹">按夹具批量补记</button>
+        </div>
+        <pre class="报" id="补报"></pre>
+      </section>
+
+      <section class="行卡">
+        <h2>卡片</h2>
+        <div id="卡片"></div>
+      </section>
+
+      <section class="行卡">
+        <h2>补记列表</h2>
+        <div class="工具条"><button class="次" id="刷">刷新</button></div>
+        <div id="表"></div>
+      </section>
+
+      <section class="行卡">
+        <h2>详情</h2>
+        <p class="说明">点列表「详情」，或直接输入业务键。只读视图恒含：业务键 / 旧悬边 / 现行悬 / 归档键 / valid。</p>
+        <div class="工具条">
+          <input id="键" placeholder="业务键"/>
+          <button class="次" id="查">读取详情</button>
+        </div>
+        <div id="详情"></div>
+      </section>
+
+      <section class="行卡">
+        <h2>悬账归档（只读）</h2>
+        <p class="说明">双写形态下旧悬的快照。归档表在库层禁改禁删；与现行悬账单是不同读引用。</p>
+        <div id="归档"></div>
+      </section>
+
+    </main>
+  </div>
+  <script src="/common.js"></script>
+  <script>
+(async () => {
+  const 位 = document.getElementById("详情");
+
+  const paint策略 = async () => {
+    const p = await get("/api/迟到补记/策略");
+    document.getElementById("形态").value = p.现行形态;
+    const cur = p.可选形态.find(x => x.名 === p.现行形态);
+    document.getElementById("形态说明").textContent = cur ? cur.说明 : "";
+  };
+
+  const paint详情 = async (键) => {
+    if (!键) { 位.innerHTML = '<div class="空">未选业务键</div>'; return; }
+    const r = await fetch("/api/迟到补记/" + encodeURIComponent(键));
+    if (!r.ok) {
+      位.innerHTML = `<div class="空">${await r.text()}</div>`;
+      return;
+    }
+    const v = await r.json();
+    位.innerHTML = 表(
+      ["业务键","形态","旧悬边","现行悬","归档键","valid","对齐差型","事件编号","补记时刻"],
+      [v],
+      x => `<td>${x.业务键}</td><td>${x.形态}</td><td>${徽(x.旧悬边)}</td>
+        <td>${x.现行悬 ? 徽("仍含悬") : 徽("现行无悬")}</td>
+        <td>${x.归档键 || "—"}</td><td>${徽(x.valid)}</td>
+        <td>${徽(x.对齐差型 || "-")}</td><td>${x.事件编号}</td><td>${x.补记时刻}</td>`
+    ) + (v.旧悬快照
+      ? `<h2 class="mt12">旧悬快照</h2>` + 表(
+          ["归档键","业务键","悬边","金额分","事件编号","原因","原悬编号","归档时刻"],
+          [v.旧悬快照],
+          s => `<td>${s.归档键}</td><td>${s.业务键}</td><td>${徽(s.悬边)}</td>
+            <td>${s.金额分}</td><td>${s.事件编号 || "-"}</td><td>${s.原因}</td>
+            <td>${s.原悬编号}</td><td>${s.归档时刻}</td>`)
+      : "")
+      + (v.校验问题 && v.校验问题.length
+        ? `<div class="条失败">${v.校验问题.join("；")}</div>` : "");
+  };
+
+  const paint = async () => {
+    const d = await get("/api/迟到补记");
+    const s = d.汇总;
+    document.getElementById("卡片").innerHTML = 统计([
+      ["补记数", s.补记数], ["消悬形态", s.消悬数], ["双写形态", s.双写数],
+      ["归档快照", s.归档数], ["现行仍含悬", s.现行仍含数],
+      ["valid", s.有效数], ["invalid", s.无效数],
+    ]);
+    document.getElementById("表").innerHTML = 表(
+      ["业务键","形态","旧悬边","现行悬","归档键","valid","对齐差型","补记时刻",""],
+      d.列表,
+      r => `<td>${r.业务键}</td><td>${r.形态}</td><td>${徽(r.旧悬边)}</td>
+        <td>${r.现行悬 ? 徽("仍含悬") : 徽("现行无悬")}</td><td>${r.归档键 || "—"}</td>
+        <td>${徽(r.valid)}</td><td>${徽(r.对齐差型 || "-")}</td><td>${r.补记时刻}</td>
+        <td><button class="次 详" data-键="${r.业务键}">详情</button></td>`
+    );
+    document.querySelectorAll("button.详").forEach(b => {
+      b.onclick = () => {
+        document.getElementById("键").value = b.dataset.键;
+        paint详情(b.dataset.键);
+      };
+    });
+
+    const a = await get("/api/迟到补记/归档");
+    document.getElementById("归档").innerHTML = 表(
+      ["归档键","业务键","悬边","金额分","事件编号","原因","原悬编号","归档时刻"],
+      a.归档,
+      r => `<td>${r.归档键}</td><td>${r.业务键}</td><td>${徽(r.悬边)}</td>
+        <td>${r.金额分}</td><td>${r.事件编号 || "-"}</td><td>${r.原因}</td>
+        <td>${r.原悬编号}</td><td>${r.归档时刻}</td>`
+    );
+  };
+
+  await paint策略();
+  await paint();
+  document.getElementById("刷").onclick = paint;
+  document.getElementById("补").onclick = async () => {
+    const 体 = { 业务键: document.getElementById("补键").value.trim() };
+    const 额 = document.getElementById("补额").value.trim();
+    if (额 !== "") 体.金额分 = Number(额);
+    const 编 = document.getElementById("补编号").value.trim();
+    if (编) 体.事件编号 = 编;
+    const r = await fetch("/api/迟到补记", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(体),
+    });
+    const j = await r.json();
+    document.getElementById("补报").textContent = JSON.stringify(j, null, 2);
+    if (r.ok) { await paint(); paint详情(体.业务键); }
+  };
+  document.getElementById("灌夹").onclick = async () => {
+    const r = await fetch("/api/迟到补记/夹具/" + encodeURIComponent("左轨迟到样例"), {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    document.getElementById("补报").textContent = JSON.stringify(await r.json(), null, 2);
+    await paint();
+  };
+  document.getElementById("查").onclick = () => paint详情(document.getElementById("键").value.trim());
+  document.getElementById("存形态").onclick = async () => {
+    const 体 = { 补记形态: document.getElementById("形态").value };
+    document.getElementById("报").textContent = JSON.stringify(await post("/api/轨规", 体), null, 2);
+    await paint策略();
+  };
+})();
+</script>
+</body>
+</html>

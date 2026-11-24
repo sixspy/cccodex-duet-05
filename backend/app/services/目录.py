@@ -53,6 +53,21 @@ def 结论列表() -> list[dict]:
     conn.close()
     return [dict(r) for r in rows]
 
+
+def 补记记录列表() -> list[dict]:
+    conn = 连接()
+    rows = conn.execute("SELECT * FROM 补记记录 ORDER BY 编号 DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def 悬账归档列表() -> list[dict]:
+    conn = 连接()
+    rows = conn.execute("SELECT * FROM 悬账归档 ORDER BY 归档时刻 DESC, 归档键").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def 概览() -> dict:
     conn = 连接()
     g = 轨规()
@@ -61,11 +76,14 @@ def 概览() -> dict:
         "骨架": g.get("骨架", ""),
         "皮": g.get("皮", ""),
         "去皮": g.get("去皮", ""),
+        "补记形态": g.get("补记形态", "消悬重对齐"),
         "左笔数": conn.execute("SELECT COUNT(*) AS c FROM 左轨流水").fetchone()["c"],
         "右笔数": conn.execute("SELECT COUNT(*) AS c FROM 右轨流水").fetchone()["c"],
         "对齐差数": conn.execute("SELECT COUNT(*) AS c FROM 对齐差").fetchone()["c"],
         "悬账数": conn.execute("SELECT COUNT(*) AS c FROM 悬账单").fetchone()["c"],
         "结论数": conn.execute("SELECT COUNT(*) AS c FROM 对拍结论").fetchone()["c"],
+        "补记数": conn.execute("SELECT COUNT(*) AS c FROM 补记记录").fetchone()["c"],
+        "归档数": conn.execute("SELECT COUNT(*) AS c FROM 悬账归档").fetchone()["c"],
     }
     conn.close()
     return out
